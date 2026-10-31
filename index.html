@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>المزرعة الذكية 🌱</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --green:#2e9e5b; --dark:#0f3d2a; --light:#e9f9ee; --accent:#ffd54a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;font-family:'Cairo',sans-serif;background:var(--dark);color:#fff}
+  #game{position:fixed;inset:0;background:linear-gradient(#bfe9ff 0%,#e9f9ee 70%,#7bc67e 100%);touch-action:none}
+  canvas{display:block;width:100%;height:100%}
+
+  #hud{position:fixed;top:0;left:0;right:0;padding:12px 16px;display:none;
+       background:rgba(15,61,42,.85);backdrop-filter:blur(4px);z-index:5}
+  #hud .row{display:flex;align-items:center;gap:12px}
+  #stage{font-size:34px;line-height:1}
+  #barWrap{flex:1;height:16px;background:rgba(255,255,255,.2);border-radius:99px;overflow:hidden}
+  #bar{height:100%;width:0%;background:linear-gradient(90deg,#7be495,var(--accent));border-radius:99px;transition:width .25s}
+  #count{font-weight:700;font-size:14px;min-width:44px;text-align:left}
+  #hint{font-size:12px;opacity:.8;margin-top:4px;text-align:center}
+
+  .overlay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;
+           padding:20px;background:rgba(15,61,42,.92);text-align:center}
+  .card{max-width:380px;width:100%;background:#fff;color:var(--dark);border-radius:24px;padding:28px 22px;
+        box-shadow:0 20px 60px rgba(0,0,0,.35);animation:pop .4s ease}
+  @keyframes pop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+  .big{font-size:64px;margin-bottom:6px}
+  h1{font-size:26px;font-weight:900;margin-bottom:8px}
+  p{font-size:15px;line-height:1.7;margin-bottom:14px;color:#2d5a45}
+  .legend{display:flex;justify-content:center;gap:14px;margin:10px 0 18px;font-size:14px;flex-wrap:wrap}
+  .legend span{background:var(--light);padding:6px 12px;border-radius:99px;font-weight:700}
+  button,.btn{font-family:inherit;font-size:18px;font-weight:700;border:none;cursor:pointer;display:inline-block;
+        padding:14px 28px;border-radius:99px;background:var(--green);color:#fff;text-decoration:none;
+        width:100%;transition:transform .15s}
+  button:active,.btn:active{transform:scale(.96)}
+  .btn.insta{background:linear-gradient(45deg,#f9a03f,#e1306c 50%,#833ab4);margin-top:6px}
+  .btn.ghost{background:transparent;color:var(--green);font-size:15px;margin-top:8px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div id="game"><canvas id="c"></canvas></div>
+
+<div id="hud">
+  <div class="row">
+    <div id="stage">🌱</div>
+    <div id="barWrap"><div id="bar"></div></div>
+    <div id="count">0/12</div>
+  </div>
+  <div id="hint">حرّك الروبوت بإصبعك لتجميع احتياجات النبتة</div>
+</div>
+
+<!-- شاشة البداية -->
+<div id="startScreen" class="overlay">
+  <div class="card">
+    <div class="big">🤖🌱</div>
+    <h1>المزرعة الذكية</h1>
+    <p>النبتة بتكبر لوحدها بالتكنولوجيا من غير أي تدخل بشري!<br>ساعد الروبوت يجمّع كل اللي النبتة محتاجاها.</p>
+    <div class="legend">
+      <span>💧 ماء</span><span>☀️ ضوء</span><span>🧪 مغذيات</span>
+    </div>
+    <p style="font-size:13px">⚠️ خلّي بالك من الحشرات 🐛</p>
+    <button id="startBtn">ابدأ اللعب</button>
+  </div>
+</div>
+
+<!-- شاشة النهاية -->
+<div id="endScreen" class="overlay hidden">
+  <div class="card">
+    <div class="big">🍅🎉</div>
+    <h1>برافو! النبتة كبرت</h1>
+    <p>شفت إزاي التكنولوجيا بتزرع من غير تدخل بشري؟<br>تابعنا على انستجرام عشان تشوف أحدث ما وصلنا إليه 💚</p>
+    <a id="instaLink" class="btn insta" href="https://www.instagram.com/INSTAGRAM_USERNAME/" target="_blank" rel="noopener">تابعنا على انستجرام 📸</a>
+    <button class="btn ghost" id="againBtn">العب تاني</button>
+  </div>
+</div>
+
+<script>
+/* =====================================================
+   إعدادات سهلة التعديل
+   ===================================================== */
+const INSTAGRAM_USERNAME = "tgh.027?psln=bDhxNnpmZzl5bnEw&utm_source=qr"; // ← غيّري ده باسم حساب الشركة (من غير @)
+const GOAL = 12;                                  // عدد العناصر المطلوبة لإنهاء اللعبة
+
+document.getElementById('instaLink').href = "https://www.instagram.com/" + INSTAGRAM_USERNAME + "/";
+
+/* ===================================================== */
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const hud = document.getElementById('hud');
+const bar = document.getElementById('bar');
+const countEl = document.getElementById('count');
+const stageEl = document.getElementById('stage');
+const startScreen = document.getElementById('startScreen');
+const endScreen = document.getElementById('endScreen');
+
+let W, H, DPR;
+function resize(){
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W*DPR; canvas.height = H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize', resize); resize();
+
+const GOOD = ['💧','☀️','🧪'];
+const BAD  = '🐛';
+const STAGES = ['🌱','🌿','🪴','🌳','🍅'];
+
+let player, items, score, running, lastSpawn, lastTime, targetX;
+
+function reset(){
+  player = { x: W/2, y: H - 90, size: 56 };
+  targetX = W/2;
+  items = [];
+  score = 0;
+  lastSpawn = 0;
+  updateHud();
+}
+
+function updateHud(){
+  const p = Math.min(score/GOAL, 1);
+  bar.style.width = (p*100) + '%';
+  countEl.textContent = score + '/' + GOAL;
+  const idx = Math.min(Math.floor(p * (STAGES.length-1)), STAGES.length-1);
+  stageEl.textContent = p >= 1 ? STAGES[STAGES.length-1] : STAGES[idx];
+}
+
+function spawn(){
+  const bad = Math.random() < 0.25;
+  items.push({
+    x: 30 + Math.random()*(W-60),
+    y: -40,
+    emoji: bad ? BAD : GOOD[Math.floor(Math.random()*GOOD.length)],
+    bad,
+    speed: 130 + Math.random()*90 + score*6,
+    size: 40
+  });
+}
+
+function movePlayer(clientX){ targetX = Math.max(30, Math.min(W-30, clientX)); }
+canvas.addEventListener('pointermove', e => movePlayer(e.clientX));
+canvas.addEventListener('pointerdown', e => movePlayer(e.clientX));
+window.addEventListener('keydown', e => {
+  if(e.key==='ArrowLeft') targetX -= 50;
+  if(e.key==='ArrowRight') targetX += 50;
+  targetX = Math.max(30, Math.min(W-30, targetX));
+});
+
+function loop(t){
+  if(!running) return;
+  const dt = Math.min((t - lastTime)/1000, 0.05);
+  lastTime = t;
+
+  // حركة اللاعب
+  player.x += (targetX - player.x) * Math.min(1, dt*14);
+
+  // إضافة عناصر
+  if(t - lastSpawn > Math.max(450, 850 - score*25)){ spawn(); lastSpawn = t; }
+
+  // تحديث العناصر
+  for(let i = items.length-1; i >= 0; i--){
+    const it = items[i];
+    it.y += it.speed * dt;
+
+    const hit = Math.abs(it.x - player.x) < (player.size/2 + it.size/3) &&
+                Math.abs(it.y - player.y) < (player.size/2 + it.size/3);
+    if(hit){
+      if(it.bad){ score = Math.max(0, score-1); navigator.vibrate && navigator.vibrate(120); }
+      else { score++; }
+      items.splice(i,1);
+      updateHud();
+      if(score >= GOAL){ finish(); return; }
+    } else if(it.y > H + 50){
+      items.splice(i,1);
+    }
+  }
+
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // الأرض
+  ctx.fillStyle = '#6b4a2f';
+  ctx.fillRect(0, H-30, W, 30);
+
+  // العناصر
+  items.forEach(it => {
+    ctx.font = it.size + 'px serif';
+    ctx.fillText(it.emoji, it.x, it.y);
+  });
+
+  // الروبوت
+  ctx.font = player.size + 'px serif';
+  ctx.fillText('🤖', player.x, player.y);
+}
+
+function start(){
+  startScreen.classList.add('hidden');
+  endScreen.classList.add('hidden');
+  hud.style.display = 'block';
+  reset();
+  running = true;
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+function finish(){
+  running = false;
+  draw();
+  hud.style.display = 'none';
+  endScreen.classList.remove('hidden');
+}
+
+document.getElementById('startBtn').addEventListener('click', start);
+document.getElementById('againBtn').addEventListener('click', start);
+</script>
+</body>
+</html>
